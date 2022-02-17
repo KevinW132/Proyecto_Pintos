@@ -24,6 +24,9 @@
    that are ready to run but not actually running. */
 static struct list threadListSleep;
 
+/*-------------------Fase 1---------------------------*/
+static struct list listaLocks;
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -96,9 +99,9 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-  /**/
+  /*lista de dormidos*/
   list_init(&threadListSleep);
-
+  list_init(&listaLocks);
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -246,6 +249,8 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
+  /*---------ordenando--------*/
+  prioridad_ordenada();
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -343,7 +348,28 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  if (thread_mlfqs)
+    return;
+  //Deshabilitamos interrupciones
+	enum intr_level old_level;
+	old_level = intr_disable ();
+  
+  //Capturando Thread Actual
+  struct thread *thread_actual = thread_current ();
+  //
+  int prioridad_anterior = thread_actual->priority;
+  thread_actual->prioridad_original = new_priority;
+  //LOCKS
+
+  if(new_priority > prioridad_anterior){
+      thread_actual->priority = new_priority;
+      thread_yield();
+  }
+
+  //Habilitar interrupciones
+	intr_set_level (old_level);
+  //thread_current ()->priority = new_priority;
+  
 }
 
 /* Returns the current thread's priority. */
@@ -470,6 +496,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->prioridad_original= priority;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -637,3 +664,55 @@ void remover_thread_durmiente(int64_t ticks){
 	}
   
 }
+/*
+void donar_prioridad(struct thread* hebra){
+  enum intr_level old_level;
+  old_level = intr_disable ();
+
+
+  //Habilitar interrupciones
+	intr_set_level (old_level);
+}*/
+/*--------------------------------------------------*/
+void prioridad_ordenada(void){
+  
+
+  struct list_elem *iter = list_begin(&ready_list);
+  struct list_elem *iter2 = list_begin(&ready_list);
+
+  for(size_t i =0; i<list_size(&ready_list); i++){
+    for(size_t j=0; j > list_size(&ready_list)-i-1; j++){
+      size_t num1= 0;
+      size_t num2= 0;
+      while(num1 < j){
+        iter = list_next(iter);
+        num1++;
+      }
+
+      while(num2 <j+1){
+        iter2 = list_next(iter2);
+        num2++;
+      }
+      
+      struct thread *thread_1= list_entry(iter, struct thread, elem);
+      struct thread *thread_2= list_entry(iter2, struct thread, elem);
+      if(thread_1->priority > thread_2->priority){
+          swap(*iter,*iter2);
+      }
+
+    }
+  }    
+
+}
+/*
+void bubbleSort(int arr[], int n) 
+{ 
+    int i, j; 
+    for (i = 0; i < n-1; i++)     
+      
+    // Last i elements are already in place 
+    for (j = 0; j < n-i-1; j++) 
+        if (arr[j] > arr[j+1]) 
+            swap(&arr[j], &arr[j+1]); 
+} 
+*/
