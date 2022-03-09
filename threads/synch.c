@@ -198,13 +198,13 @@ lock_acquire (struct lock *lock)
   enum intr_level old_level = intr_disable();
 
   if(lock->holder){
-    thread_current()->waiting_lock = lock,
-    list_push_back(&ready_list,&thread_current()->elem)
-    prioridad_ordenada();
+    thread_current()->waiting_lock = lock;
+    list_push_back(&lock->waiters,&thread_current()->elem);
+  }else{
+     lock->holder = thread_current ();
   }
   intr_set_level(old_level);
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
 
 }
 
@@ -241,7 +241,7 @@ lock_release (struct lock *lock)
   enum intr_level old_level = intr_disable();
 
   struct list_elem *i;
-  for(i= list_begin(&ready_list); e != list_end(&ready_list); ){
+  for(i= list_begin(&lock->waiters); i != list_end(&lock->waiters); ){
       struct thread *thread = list_entry(i,struct thread, elem);
       if(thread->waiting_lock == lock){
         struct list_elem *tmp = i;
@@ -253,8 +253,8 @@ lock_release (struct lock *lock)
   }
 
   thread_current()->priority = thread_current()->original_priority;
-  if(!list_empty(&ready_list)){
-    struct thread *donador = list_entry(list_front(&ready_list,struct thread, elem));
+  if(!list_empty(&lock->waiters)){
+    struct thread *donador = list_entry(list_front(&lock->waiters,struct thread, elem));
     if(thread_current()->priority = donador->priority;
   }
   intr_set_level(old_level);

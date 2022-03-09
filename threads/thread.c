@@ -14,7 +14,10 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
-
+/*Referencias*/
+/*
+https://github.com/happystep/Pintos-Project-1/blob/master/src/threads/thread.h
+*/
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -249,8 +252,6 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
-  /*---------ordenando--------*/
-  prioridad_ordenada();
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -358,15 +359,27 @@ thread_set_priority (int new_priority)
   int prioridad_anterior = thread_actual->priority;
   thread_actual->prioridad_original = prioridad_anterior;
   //LOCKS
-  prioridad_ordenada();
+  int priorialta=prioridad_ordenada();
   if(!list_empty(&ready_list)){
-    struct thread *thread_max_prioridad = list_entry(list_front(&ready_list), struct thread, elem);
+    if(thread_current()->priority < priorialta){
+      thread_current()->priority = new_priority;
+    }
+    if(new_priority < prioridad_anterior){
+          if(!list_empty(&ready_list)){
+            if(thread_current()->priority < priorialta){
+                thread_yield();
+            } 
+         }
+    }
+  }
+/*  if(!list_empty(&lock->waiters)){
+    struct thread *thread_max_prioridad = list_entry(list_front(&lock->waiters), struct thread, elem);
     if(thread_actual->priority < thread_max_prioridad->priority){
       thread_actual->priority = new_priority;
     }
     if(new_priority < prioridad_anterior){
-      struct thread *thread_max_prioridad = list_entry(list_front(&ready_list), struct thread, elem);
-          if(!list_empty(&ready_list)){
+      struct thread *thread_max_prioridad = list_entry(list_front(&lock->waiters), struct thread, elem);
+          if(!list_empty(&lock->waiters)){
             if(thread_actual->priority < thread_max_prioridad->priority){
                 thread_yield();
             } 
@@ -374,7 +387,7 @@ thread_set_priority (int new_priority)
     }
   }
 
-
+*/
 
  /* if(new_priority > prioridad_anterior){
       thread_actual->priority = new_priority;
@@ -689,14 +702,26 @@ void donar_prioridad(struct thread* hebra){
 	intr_set_level (old_level);
 }*/
 /*--------------------------------------------------*/
-void prioridad_ordenada(void){
-  
+int prioridad_ordenada(void){
+  struct list_elem *lista;
+  int max_priority = PRI_MIN;
 
-  struct list_elem *iter = list_begin(&ready_list);
-  struct list_elem *iter2 = list_begin(&ready_list);
+  int old_level = intr_disable();
 
-  for(size_t i =0; i<list_size(&ready_list); i++){
-    for(size_t j=0; j > list_size(&ready_list)-i-1; j++){
+  for (lista = list_begin(&ready_list); lista != list_end(&ready_list); lista = list_next(lista)) {
+    struct thread *cur_thread = list_entry(lista, struct thread, elem);
+    if (cur_thread->priority > max_priority) {
+      max_priority = cur_thread->priority;
+    }
+  }
+  intr_set_level(old_level);
+  return max_priority;
+  /*
+  struct list_elem *iter = list_begin(&lock->waiters);
+  struct list_elem *iter2 = list_begin(&lock->waiters);
+
+  for(size_t i =0; i<list_size(&lock->waiters); i++){
+    for(size_t j=0; j > list_size(&lock->waiters)-i-1; j++){
       size_t num1= 0;
       size_t num2= 0;
       while(num1 < j){
@@ -717,7 +742,7 @@ void prioridad_ordenada(void){
 
     }
   }    
-
+*/
 }
 /*
 void bubbleSort(int arr[], int n) 
