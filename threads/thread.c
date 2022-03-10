@@ -360,16 +360,30 @@ thread_set_priority (int new_priority)
   thread_actual->prioridad_original = prioridad_anterior;
   //LOCKS
   int priorialta=prioridad_ordenada();
-  if(!list_empty(&ready_list)){
+  if(!list_empty(&lock->waiters)){
     if(thread_current()->priority < priorialta){
       thread_current()->priority = new_priority;
     }
-    if(new_priority < prioridad_anterior){
-          if(!list_empty(&ready_list)){
+  }
+  if(new_priority < prioridad_anterior){
+          if(!list_empty(&lock->waiters)){
             if(thread_current()->priority < priorialta){
                 thread_yield();
             } 
          }
+  }else{
+    struct thread *t = thread_current ();
+    struct lock *l = t->waiting_lock;
+    int i = 0;
+    for (; l != NULL && i != DONATION_MAX_DEPTH ; i++) {
+    if (l->holder == NULL) return;
+    if (l->holder->priority < t->priority) {
+      l->holder->priority = t->priority;
+      t = l->holder;
+      l = t->waiting_lock;
+    } else {
+      return;
+    }
     }
   }
 /*  if(!list_empty(&lock->waiters)){
@@ -692,15 +706,7 @@ void remover_thread_durmiente(int64_t ticks){
 	}
   
 }
-/*
-void donar_prioridad(struct thread* hebra){
-  enum intr_level old_level;
-  old_level = intr_disable ();
 
-
-  //Habilitar interrupciones
-	intr_set_level (old_level);
-}*/
 /*--------------------------------------------------*/
 int prioridad_ordenada(void){
   struct list_elem *lista;
