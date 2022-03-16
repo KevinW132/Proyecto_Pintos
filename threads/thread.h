@@ -4,7 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
+/*-----------------------------------asdgfsadfasd*/
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -92,7 +92,7 @@ struct thread
    
    /* Cosas nuevas*/
     int prioridad_original;             //Fase1
-
+    
 
     struct list listalock;
     struct lock * waiting_lock;

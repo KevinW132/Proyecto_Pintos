@@ -22,7 +22,7 @@ https://github.com/happystep/Pintos-Project-1/blob/master/src/threads/thread.h
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
-
+#define DONATION_MAX_DEPTH  8
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list threadListSleep;
@@ -46,6 +46,7 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
+static struct lock *lock;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -349,6 +350,9 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 { 
+  if(new_priority == thread_current() ->priority){
+    return;
+  }
   //Deshabilitamos interrupciones
 	enum intr_level old_level;
 	old_level = intr_disable ();
@@ -357,12 +361,16 @@ thread_set_priority (int new_priority)
   struct thread *thread_actual = thread_current();
   //
   int prioridad_anterior = thread_actual->priority;
-  thread_actual->prioridad_original = prioridad_anterior;
+
+  thread_actual->prioridad_original = new_priority;
+  thread_actual->priority = new_priority;
+
   //LOCKS
   int priorialta=prioridad_ordenada();
   if(!list_empty(&lock->waiters)){
+
     if(thread_current()->priority < priorialta){
-      thread_current()->priority = new_priority;
+      thread_current()->priority = priorialta;
     }
   }
   if(new_priority < prioridad_anterior){
@@ -386,29 +394,6 @@ thread_set_priority (int new_priority)
     }
     }
   }
-/*  if(!list_empty(&lock->waiters)){
-    struct thread *thread_max_prioridad = list_entry(list_front(&lock->waiters), struct thread, elem);
-    if(thread_actual->priority < thread_max_prioridad->priority){
-      thread_actual->priority = new_priority;
-    }
-    if(new_priority < prioridad_anterior){
-      struct thread *thread_max_prioridad = list_entry(list_front(&lock->waiters), struct thread, elem);
-          if(!list_empty(&lock->waiters)){
-            if(thread_actual->priority < thread_max_prioridad->priority){
-                thread_yield();
-            } 
-         }
-    }
-  }
-
-*/
-
- /* if(new_priority > prioridad_anterior){
-      thread_actual->priority = new_priority;
-      thread_yield();
-  }
-*/
-  //Habilitar interrupciones
 	intr_set_level (old_level);
   //thread_current ()->priority = new_priority;
   
@@ -710,55 +695,16 @@ void remover_thread_durmiente(int64_t ticks){
 /*--------------------------------------------------*/
 int prioridad_ordenada(void){
   struct list_elem *lista;
-  int max_priority = PRI_MIN;
+    int max_priority = PRI_MIN;
 
-  int old_level = intr_disable();
+    int old_level = intr_disable();
 
-  for (lista = list_begin(&ready_list); lista != list_end(&ready_list); lista = list_next(lista)) {
-    struct thread *cur_thread = list_entry(lista, struct thread, elem);
-    if (cur_thread->priority > max_priority) {
-      max_priority = cur_thread->priority;
+    for (lista = list_begin(&ready_list); lista != list_end(&ready_list); lista = list_next(lista)) {
+      struct thread *cur_thread = list_entry(lista, struct thread, elem);
+      if (cur_thread->priority > max_priority) {
+        max_priority = cur_thread->priority;
+      }
     }
-  }
-  intr_set_level(old_level);
-  return max_priority;
-  /*
-  struct list_elem *iter = list_begin(&lock->waiters);
-  struct list_elem *iter2 = list_begin(&lock->waiters);
-
-  for(size_t i =0; i<list_size(&lock->waiters); i++){
-    for(size_t j=0; j > list_size(&lock->waiters)-i-1; j++){
-      size_t num1= 0;
-      size_t num2= 0;
-      while(num1 < j){
-        iter = list_next(iter);
-        num1++;
-      }
-
-      while(num2 <j+1){
-        iter2 = list_next(iter2);
-        num2++;
-      }
-      
-      struct thread *thread_1= list_entry(iter, struct thread, elem);
-      struct thread *thread_2= list_entry(iter2, struct thread, elem);
-      if(thread_1->priority > thread_2->priority){
-          swap(*iter,*iter2);
-      }
-
-    }
-  }    
-*/
+    intr_set_level(old_level);
+    return max_priority;
 }
-/*
-void bubbleSort(int arr[], int n) 
-{ 
-    int i, j; 
-    for (i = 0; i < n-1; i++)     
-      
-    // Last i elements are already in place 
-    for (j = 0; j < n-i-1; j++) 
-        if (arr[j] > arr[j+1]) 
-            swap(&arr[j], &arr[j+1]); 
-} 
-*/

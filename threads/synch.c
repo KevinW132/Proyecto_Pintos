@@ -252,10 +252,12 @@ lock_release (struct lock *lock)
       }
   }
 
-  thread_current()->priority = thread_current()->original_priority;
+  thread_current()->priority = thread_current()->prioridad_original;
   if(!list_empty(&lock->waiters)){
     struct thread *donador = list_entry(list_front(&lock->waiters,struct thread, elem));
-    if(thread_current()->priority = donador->priority;
+    if(thread_current()->priority = donador->priority){
+
+    };
   }
   intr_set_level(old_level);
   lock->holder = NULL;
