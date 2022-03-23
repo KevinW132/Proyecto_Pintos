@@ -22,15 +22,8 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
-static struct list threadListSleep;
-
-/*-------------------Fase 1---------------------------*/
-static struct list listaLocks;
-
-/* List of processes in THREAD_READY state, that is, processes
-   that are ready to run but not actually running. */
 static struct list ready_list;
-
+static struct list threadListSleep;
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -99,16 +92,13 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-  /*lista de dormidos*/
-  list_init(&threadListSleep);
-  list_init(&listaLocks);
+  list_init (&threadListSleep);
+  
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-
-
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -249,8 +239,6 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
-  /*---------ordenando--------*/
-  prioridad_ordenada();
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -347,44 +335,8 @@ thread_foreach (thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
-{ 
-  //Deshabilitamos interrupciones
-	enum intr_level old_level;
-	old_level = intr_disable ();
-  
-  //Capturando Thread Actual
-  struct thread *thread_actual = thread_current();
-  //
-  int prioridad_anterior = thread_actual->priority;
-  thread_actual->prioridad_original = prioridad_anterior;
-  //LOCKS
-  prioridad_ordenada();
-  if(!list_empty(&ready_list)){
-    struct thread *thread_max_prioridad = list_entry(list_front(&ready_list), struct thread, elem);
-    if(thread_actual->priority < thread_max_prioridad->priority){
-      thread_actual->priority = new_priority;
-    }
-    if(new_priority < prioridad_anterior){
-      struct thread *thread_max_prioridad = list_entry(list_front(&ready_list), struct thread, elem);
-          if(!list_empty(&ready_list)){
-            if(thread_actual->priority < thread_max_prioridad->priority){
-                thread_yield();
-            } 
-         }
-    }
-  }
-
-
-
- /* if(new_priority > prioridad_anterior){
-      thread_actual->priority = new_priority;
-      thread_yield();
-  }
-*/
-  //Habilitar interrupciones
-	intr_set_level (old_level);
-  //thread_current ()->priority = new_priority;
-  
+{
+  thread_current ()->priority = new_priority;
 }
 
 /* Returns the current thread's priority. */
@@ -511,7 +463,6 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  t->prioridad_original= priority;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -632,102 +583,55 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
-/* */
-void insertar_en_lista_espera(int64_t ticks){
 
-	//Deshabilitamos interrupciones
-	enum intr_level old_level;
-	old_level = intr_disable ();
+void insertar_en_lista_espera(int64_t ticks)
+{
 
-	/* Remover el thread actual de "ready_list" e insertarlo en "lista_espera"
-	Cambiar su estatus a THREAD_BLOCKED, y definir su tiempo de expiracion */
-	
-	struct thread *thread_actual = thread_current ();
+  // Deshabilitamos interrupciones
+  enum intr_level old_level;
+  old_level = intr_disable();
+
+  /* Remover el thread actual de "ready_list" e insertarlo en "lista_espera"
+  Cambiar su estatus a THREAD_BLOCKED, y definir su tiempo de expiracion */
+
+  struct thread *thread_actual = thread_current();
   thread_actual->threadSleep = timer_ticks() + ticks;
-  
+
   /*Donde TIEMPO_DORMIDO es el atributo de la estructura thread que usted
-	  definió como paso inicial*/
-	
+    definió como paso inicial*/
+
   list_push_back(&threadListSleep, &thread_actual->elem);
   thread_block();
 
-  //Habilitar interrupciones
-	intr_set_level (old_level);
+  // Habilitar interrupciones
+  intr_set_level(old_level);
 }
 
-void remover_thread_durmiente(int64_t ticks){
+void remover_thread_durmiente(int64_t ticks)
+{
 
-	/*Cuando ocurra un timer_interrupt, si el tiempo del thread ha expirado
-	Se mueve de regreso a ready_list, con la funcion thread_unblock*/
-	
-	//Iterar sobre "lista_espera"
-	struct list_elem *iter = list_begin(&threadListSleep);
-	while(iter != list_end(&threadListSleep) ){
-		struct thread *thread_lista_espera= list_entry(iter, struct thread, elem);
-		
-		/*Si el tiempo global es mayor al tiempo que el thread permanecía dormido
-		  entonces su tiempo de dormir ha expirado*/
-		
-		if(ticks >= thread_lista_espera->threadSleep){
-			//Lo removemos de "lista_espera" y lo regresamos a ready_list
-			iter = list_remove(iter);
-			thread_unblock(thread_lista_espera);
-		}else{
-			//Sino, seguir iterando
-			iter = list_next(iter);
-		}
-	}
-  
-}
-/*
-void donar_prioridad(struct thread* hebra){
-  enum intr_level old_level;
-  old_level = intr_disable ();
+  /*Cuando ocurra un timer_interrupt, si el tiempo del thread ha expirado
+  Se mueve de regreso a ready_list, con la funcion thread_unblock*/
 
+  // Iterar sobre "lista_espera"
+  struct list_elem *iter = list_begin(&threadListSleep);
+  while (iter != list_end(&threadListSleep))
+  {
+    struct thread *thread_lista_espera = list_entry(iter, struct thread, elem);
 
-  //Habilitar interrupciones
-	intr_set_level (old_level);
-}*/
-/*--------------------------------------------------*/
-void prioridad_ordenada(void){
-  
+    /*Si el tiempo global es mayor al tiempo que el thread permanecía dormido
+      entonces su tiempo de dormir ha expirado*/
 
-  struct list_elem *iter = list_begin(&ready_list);
-  struct list_elem *iter2 = list_begin(&ready_list);
-
-  for(size_t i =0; i<list_size(&ready_list); i++){
-    for(size_t j=0; j > list_size(&ready_list)-i-1; j++){
-      size_t num1= 0;
-      size_t num2= 0;
-      while(num1 < j){
-        iter = list_next(iter);
-        num1++;
-      }
-
-      while(num2 <j+1){
-        iter2 = list_next(iter2);
-        num2++;
-      }
-      
-      struct thread *thread_1= list_entry(iter, struct thread, elem);
-      struct thread *thread_2= list_entry(iter2, struct thread, elem);
-      if(thread_1->priority > thread_2->priority){
-          swap(*iter,*iter2);
-      }
-
+    if (ticks >= thread_lista_espera->threadSleep)
+    {
+      // Lo removemos de "lista_espera" y lo regresamos a ready_list
+      iter = list_remove(iter);
+      thread_unblock(thread_lista_espera);
     }
-  }    
-
+    else
+    {
+      // Sino, seguir iterando
+      iter = list_next(iter);
+    }
+  }
 }
-/*
-void bubbleSort(int arr[], int n) 
-{ 
-    int i, j; 
-    for (i = 0; i < n-1; i++)     
-      
-    // Last i elements are already in place 
-    for (j = 0; j < n-i-1; j++) 
-        if (arr[j] > arr[j+1]) 
-            swap(&arr[j], &arr[j+1]); 
-} 
-*/

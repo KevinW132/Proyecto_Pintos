@@ -93,7 +93,7 @@ timer_sleep (int64_t ticks)
 
   ASSERT (intr_get_level () == INTR_ON);
   /*while (timer_elapsed (start) < ticks) 
-    thread_yield ();*/
+    thread_yield ();¬*/
   insertar_en_lista_espera(ticks);
 }
 
@@ -173,9 +173,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-  /* Eliminacion de threads durmientes*/
-    remover_thread_durmiente(ticks);
-
+  remover_thread_durmiente(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
