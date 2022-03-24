@@ -635,3 +635,14 @@ void remover_thread_durmiente(int64_t ticks)
     }
   }
 }
+void maxiPrio(void){
+  enum intr_level old_level;
+  old_level = intr_disable();
+  if(!list_empty(&ready_list)){
+    struct thread *threausa = list_entry(list_front(&ready_list), struct thread, elem);
+    if(thread_current()->priority < threausa->priority) {
+      thread_yield();
+    }
+  }
+  intr_set_level(old_level);
+}

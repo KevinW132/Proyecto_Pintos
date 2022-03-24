@@ -92,7 +92,8 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-   uint64_t threadSleep;
+    uint64_t threadSleep;
+    int prioriginal;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
