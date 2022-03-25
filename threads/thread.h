@@ -94,6 +94,7 @@ struct thread
     struct list_elem elem;              /* List element. */
     uint64_t threadSleep;
     int prioriginal;
+    struct lock *lock_lusted;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -127,6 +128,11 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+
+
+void maxiPrio (void);
+bool primayqu (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void donprio (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);

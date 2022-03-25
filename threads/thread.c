@@ -646,3 +646,31 @@ void maxiPrio(void){
   }
   intr_set_level(old_level);
 }
+bool primayqu(const struct list_elem *ele1, const struct list_elem *ele2, void *aux UNUSED){
+  struct thread *thread1 = list_entry (ele1, struct thread, elem);
+  struct thread *thread2 = list_entry (ele2, struct thread, elem);
+  bool tr = false; 
+  if (thread1->priority > thread2->priority){
+    tr=true;
+  }
+  return tr;
+}
+
+void donprio(void){
+  struct thread *threact = thread_current();
+  struct lock *loc = threact->lock_lusted;
+  for(int i = 0;i != 8; i++){
+    if (loc != NULL){
+      if(loc->holder == NULL){
+        return;
+      } 
+      if(loc->holder->priority < threact->priority) {
+        loc->holder->priority = threact->priority;
+        threact = loc->holder;
+        loc = threact->lock_lusted;
+      } else {
+        return;
+      }
+    }
+  }
+}
