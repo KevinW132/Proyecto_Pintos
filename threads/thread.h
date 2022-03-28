@@ -95,6 +95,8 @@ struct thread
     uint64_t threadSleep;
     int prioriginal;
     struct lock *lock_lusted;
+    struct list lisdon;
+    struct list_elem eledona;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
