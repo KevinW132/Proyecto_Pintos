@@ -97,6 +97,8 @@ struct thread
     struct lock *lock_lusted;
     struct list lisdon;
     struct list_elem eledona;
+    int nice;
+    int recent_cpu;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
