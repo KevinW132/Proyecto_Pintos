@@ -258,9 +258,9 @@ lock_release (struct lock *lock)
     }
     thread_current ()->priority = thread_current ()->prioriginal;
     if (!list_empty (&thread_current ()->lisdon)) {
-      struct thread *donor_with_max_priority = list_entry (list_front (&thread_current ()->lisdon), struct thread, eledona);
-      if (thread_current ()->priority < donor_with_max_priority->priority)
-        thread_current ()->priority = donor_with_max_priority->priority;
+      struct thread *donPrioMaxi = list_entry (list_front (&thread_current ()->lisdon), struct thread, eledona);
+      if (thread_current ()->priority < donPrioMaxi->priority)
+        thread_current ()->priority = donPrioMaxi->priority;
     }
   }
   sema_up (&lock->semaphore);
