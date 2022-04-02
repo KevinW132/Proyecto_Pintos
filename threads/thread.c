@@ -341,7 +341,28 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  if(new_priority != thread_current()->priority){
+    enum intr_level old_level;
+    old_level = intr_disable();
+    int old_priority = thread_current()->priority;
+    thread_current()->prioriginal = new_priority;
+    thread_current()->priority = new_priority;
+    if(!list_empty(&thread_current()->lisdon)) {
+      struct thread *donor_with_max_priority = list_entry(list_front(&thread_current()->lisdon), struct thread, eledona);
+      if(thread_current()->priority < donor_with_max_priority->priority){
+        thread_current()->priority = donor_with_max_priority->priority;
+      }
+    }
+    if(new_priority < old_priority){
+      maxiPrio();
+    }else{
+      donprio();
+    }
+    intr_set_level(old_level);
+  }else{
+    return;
+  }
+  
 }
 
 /* Returns the current thread's priority. */
