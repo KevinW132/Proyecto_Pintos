@@ -243,7 +243,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem,(list_less_func *) &primayqu,NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -314,7 +314,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  list_insert_ordered(&ready_list, &cur->elem,(list_less_func *) &primayqu, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -337,25 +337,52 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-/* Sets the current thread's priority to NEW_PRIORITY. */
+/* Sets the current thread's priority to new_priority. If the current thread no longer has the highest priority, yields. */
 void
 thread_set_priority (int new_priority) 
 {
+  /* Si tenemos la misma prioridad a la que nos van a donar no se hace nada de ser diferente se ejecuta el codigo*/
   if(new_priority != thread_current()->priority){
     enum intr_level old_level;
     old_level = intr_disable();
+    /*Guardar la prioridad anterior al cambio */
     int old_priority = thread_current()->priority;
+    /* Cambiamos todas nuestras variables de prioridad a la que nos pasaron */
     thread_current()->prioriginal = new_priority;
     thread_current()->priority = new_priority;
+    /* Verificamos que hayan threads que nos van a donar*/
     if(!list_empty(&thread_current()->lisdon)) {
+      /* Segun la lista de donadores que tiene cada thread, lo de abajo nos devuelve el donador con la maxima prioridad
+      Como sabemos quienes son los donadores? revisamos Lock_aquire() en sync.c */
       struct thread *donor_with_max_priority = list_entry(list_front(&thread_current()->lisdon), struct thread, eledona);
+      /* Si la nueva prioridad que nos pasaron es menor a la prioridad del thread con maxima prioridad */
       if(thread_current()->priority < donor_with_max_priority->priority){
+        /* Nos donan la prioridad del thread con maxima prioridad */
         thread_current()->priority = donor_with_max_priority->priority;
       }
     }
+    /* Verificamos si bajamos la prioridad
+    Verificamos si la nueva que nos pasaron es menor a la vieja prioridad */
+    /*
+      Ejemplo:
+      t1-> 45 (old_priority)
+      t1.set_priority(34);
+      34 < 45
+      Entonces hubo baja de prioridad
+      maxiPrio()
+
+      t1-> 45 
+      t1.set_priority(64);
+      45 < 64
+      Subimos nuestra prioridad
+      Se relaiza donacion
+      donPrio()
+    */
     if(new_priority < old_priority){
+      /* Dada a la baja de prioridad verificamos la maxima prioridad, si no somos el max nos dormimos*/
       maxiPrio();
     }else{
+      /* Dado al incremento de prioridad nos donan la prioridad maxima*/
       donprio();
     }
     intr_set_level(old_level);
@@ -680,8 +707,11 @@ void remover_thread_durmiente(int64_t ticks)
 void maxiPrio(void){
   enum intr_level old_level;
   old_level = intr_disable();
+  /*Si hay threads esperando en la lista de ready*/
   if(!list_empty(&ready_list)){
+    /* Obtenemos otra vez el thread con maxima prioridad */
     struct thread *threausa = list_entry(list_front(&ready_list), struct thread, elem);
+    /*Si no somos el thread con maxima prioridad hacemos yield() segun: If the current thread no longer has the highest priority, yields. */
     if(thread_current()->priority < threausa->priority) {
       thread_yield();
     }
@@ -697,18 +727,28 @@ bool primayqu(const struct list_elem *ele1, const struct list_elem *ele2, void *
   }
   return tr;
 }
-
+/* Donacion de prioridad */
 void donprio(void){
+  /* Guardamos el (thread actual = threact)*/
   struct thread *threact = thread_current();
+  /* El lock deseado del thread actual */
   struct lock *loc = threact->lock_lusted;
+  /* recorremos la maxima profundida de donacion */
   for(int i = 0;i != 8; i++){
+    /* Si el lock existe */
     if (loc != NULL){
+      /* Si el lock no tiene holder */
       if(loc->holder == NULL){
+        /* Al final lo vamos a agarrar*/
         return;
       } 
+      /* Si el que tiene el lock su prioridad es menor a la del thread actual */
       if(loc->holder->priority < threact->priority) {
+        /* Realizamos la prioridad */
         loc->holder->priority = threact->priority;
+        /* El thread actual sera el nuevo holder */
         threact = loc->holder;
+        /* Asignamos el lock al lock del thread */
         loc = threact->lock_lusted;
       } else {
         return;

@@ -200,13 +200,18 @@ lock_acquire (struct lock *lock)
   enum intr_level old_level;
   old_level = intr_disable();
     if (!thread_mlfqs)
+    /* Mientras alguien tiene el lock */
     if (lock->holder != NULL){
+      /* El thread actual que quiere agarrar este lock, se lo colocamos como deseado */
       thread_current ()->lock_lusted = lock;
+      /* El thread actual que quiere agarrar este lock, se lo colocamos como deseado */
       list_insert_ordered (&lock->holder->lisdon, &thread_current ()->eledona, (list_less_func *) &primayqu, NULL);
     }
 
   sema_down (&lock->semaphore); 
+  /* Si no hay alguien que tenga el lock, no vamos a desear ninguno porque ya tenemos derecho de agarrarlo*/
   thread_current ()->lock_lusted = NULL;
+  /* Agarramos el lock */
   lock->holder = thread_current ();
   intr_set_level (old_level);
 }
@@ -249,17 +254,26 @@ lock_release (struct lock *lock)
   old_level = intr_disable();
   lock->holder = NULL;
   if (!thread_mlfqs) {
+    /* Recorremos la lista de donadores */
     for (struct list_elem *elemls = list_begin (&thread_current ()->lisdon); elemls != list_end (&thread_current ()->lisdon); elemls = list_next (elemls)) {
+      /* Obtenemos un elemento de la lista de donadores */
       struct thread *thre = list_entry (elemls, struct thread, eledona);
+      /* Verificamos si este thread tiene el lock*/
       if (thre->lock_lusted == lock) {
         struct list_elem *to_delete = elemls;
+        /* Lo eliminamos de la lista de donadores */
         list_remove (to_delete);
       }
     }
+    /* Devolvemos la prioridad prestada */
     thread_current ()->priority = thread_current ()->prioriginal;
+    /* Si ya no hay threads de posibles donadores  */
     if (!list_empty (&thread_current ()->lisdon)) {
+      /* Obtenemos el donador con la maxima prioridad */
       struct thread *donPrioMaxi = list_entry (list_front (&thread_current ()->lisdon), struct thread, eledona);
+      /* Verificamos de nuevo si tenemos la prioridad maxima */
       if (thread_current ()->priority < donPrioMaxi->priority)
+        /* Si no la tenemos no la tienen que dar*/
         thread_current ()->priority = donPrioMaxi->priority;
     }
   }
