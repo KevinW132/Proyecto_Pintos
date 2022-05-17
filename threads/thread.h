@@ -4,7 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
+#include <threads/synch.h>
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -80,6 +80,25 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+struct child
+  {
+    tid_t idthread;                           /* tid of the thread */
+    bool thrcorriendo;                          /* whether the child's thread is run successfully */
+    struct list_elem lista_child;         /* list of children */
+    struct semaphore semaforo;               /* semaphore to control waiting */
+    int store_exit;                      /* the exit status of child thread */
+  };
+/* File that the thread open */
+struct thread_file
+  {
+    int fd;
+    struct file* file;
+    struct list_elem file_elem;
+  };
+
+
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -92,22 +111,23 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    uint64_t threadSleep;
-    int prioriginal;
-    struct lock *lock_lusted;
-    struct list lisdon;
-    struct list_elem eledona;
-    int nice;
-    int recent_cpu;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
-
-    /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
-  };
+   struct list childs;                 
+   struct child * thread_child;        
+   int st_exit;                        
+   struct semaphore sema;              
+   bool success;                       
+   struct thread* parent;              
+   struct list files;                  
+   int max_file_fd;                    
+   unsigned magic;                     
+};
+void acquire_lock_f(void);
+void release_lock_f(void);
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -132,11 +152,6 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
-
-
-void maxiPrio (void);
-bool primayqu (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-void donprio (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
