@@ -4,7 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-/*-----------------------------------asdgfsadfasd*/
+#include <threads/synch.h>
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -80,6 +80,25 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+struct child
+  {
+    tid_t idthread;                           /* tid of the thread */
+    bool thrcorriendo;                          /* whether the child's thread is run successfully */
+    struct list_elem lista_child;         /* list of children */
+    struct semaphore semaforo;               /* semaphore to control waiting */
+    int store_exit;                      /* the exit status of child thread */
+  };
+/* File that the thread open */
+struct thread_file
+  {
+    int fd;
+    struct file* file;
+    struct list_elem file_elem;
+  };
+
+
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -89,28 +108,26 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-   
-   /* Cosas nuevas*/
-    int prioridad_original;             //Fase1
-    
-
-    struct list listalock;
-    struct lock * waiting_lock;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
-     /* Tiempo que un thread debe permanecer dormido */
-     uint64_t threadSleep;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
-
-    /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
-  };
+   struct list childs;                 
+   struct child * thread_child;        
+   int st_exit;                        
+   struct semaphore sema;              
+   bool success;                       
+   struct thread* parent;              
+   struct list files;                  
+   int max_file_fd;                    
+   unsigned magic;                     
+};
+void acquire_lock_f(void);
+void release_lock_f(void);
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
