@@ -71,6 +71,15 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+
+static struct lock lf;
+void acquire_lock_f (){
+  lock_acquire(&lf);
+}
+void release_lock_f (){
+  lock_release(&lf);
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -92,7 +101,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-
+  lock_init(&lf);
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -182,6 +191,15 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  /* Our implementation */
+  /* Initialize for the thread's child */
+  t->thread_child = malloc(sizeof(struct child));
+  t->thread_child->idthread = tid;
+  sema_init (&t->thread_child->semaforo, 0);
+  list_push_back (&thread_current()->childs, &t->thread_child->lista_child);
+  t->thread_child->store_exit = UINT32_MAX;
+  t->thread_child->thrcorriendo = false;
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -290,6 +308,21 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
+
+  printf ("%s: exit(%d)\n",thread_name(), thread_current()->st_exit);
+  thread_current ()->thread_child->store_exit = thread_current()->st_exit;
+  sema_up (&thread_current()->thread_child->semaforo);
+  struct list_elem *e;
+  struct list *files = &thread_current()->files;
+  while(!list_empty (files)){
+    e = list_pop_front (files);
+    struct thread_file *f = list_entry (e, struct thread_file, file_elem);
+    acquire_lock_f ();
+    release_lock_f ();
+    list_remove (e);
+    free (f);
+  }
+
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
@@ -463,6 +496,18 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  if (t==initial_thread){
+    t->parent=NULL;
+  }else{
+    t->parent = thread_current();
+  }
+  list_init(&t->childs);
+  list_init(&t->files);
+  sema_init(&t->sema, 0);
+  t->success = true;
+  t->st_exit = UINT32_MAX;
+  t->max_file_fd=2;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
