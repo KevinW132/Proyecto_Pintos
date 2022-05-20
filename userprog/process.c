@@ -21,6 +21,10 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+	
+// Agregar los argumentos hacia el stack
+void push_argument (void **esp, int argc, int argv[]);
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -28,20 +32,41 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  /*Dos copias del string del filename con sus argumentos */
+  char *cop1file, *cop2file;
+  /* id de un thread para ejecutar el process_create()*/
   tid_t tid;
 
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  cop1file = palloc_get_page (0);//Se le asigna una pagina disponible a la primera copia
+  if (cop1file == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  
+  /* Copia del file name tambien se le asigna una pagina */
+  cop2file = palloc_get_page (0);
+  if (cop2file == NULL){
+    palloc_free_page(cop1file);
+    return TID_ERROR;
+  }
+  //Se realizan las copias del file name
+  strlcpy(cop1file, file_name, PGSIZE);
+  strlcpy(cop2file, file_name, PGSIZE);
+  char *pritoke; /*Puntero que guardara la primera tokenizacion de la primera copia*/
+  char *arch = strtok_r(cop1file, " ", &pritoke); /* Nombre del archivo */
+  
+  /* Se crea un thread para comenzar el proceso, se le envia el nombre, prioridad default, funcion start_process, la copia del filename */
+  tid = thread_create (arch, PRI_DEFAULT, start_process, cop2file);
+  /* Se elimina la pagina de la primera copia */
+  palloc_free_page(cop1file);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  if (tid == TID_ERROR){
+    palloc_free_page (cop2file);
+    return tid;
+  }
+  
+  /* Sema down el proceso padre, nos quedamos a la espera del hijo */
+  sema_down(&thread_current()->sema);
+  if (!thread_current()->success) return TID_ERROR;/* No se puede crear un nuevo proceso thread*/
+  /*Regresamos el thread id*/
   return tid;
 }
 
@@ -53,18 +78,51 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
-  /* Initialize interrupt frame and load executable. */
+  /*Nuevo string para la copia del file name */
+  char *fn_copy=malloc(strlen(file_name)+1);
+  /* Se realiza la copia */
+  strlcpy(fn_copy,file_name,strlen(file_name)+1);
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+
+  /*Cargamos el ejecutable */
+  char *tkn, *pritoke;
+  file_name = strtok_r (file_name, " ", &pritoke);
+  /*Cargamos el nombre del archivo, siguiente instruccion a ejecutar, el stack pointer */
+
   success = load (file_name, &if_.eip, &if_.esp);
 
-  /* If load failed, quit. */
+  if (success){
+    /* Cantidad de argumentos */
+    int argc = 0;
+    /* Arreglo de tamaño fijo para almacenar la direccion de
+    50 argumentos, definidos por el tamaño del filename */
+    int argv[50];
+    /*Recorremos los argumentos y los almacenamos en el arreglo*/
+    for (tkn = strtok_r (fn_copy, " ", &pritoke); tkn != NULL; tkn = strtok_r (NULL, " ", &pritoke)){
+      if_.esp -= (strlen(tkn)+1);
+      memcpy (if_.esp, tkn, strlen(tkn)+1);
+      argv[argc++] = (int) if_.esp;/* Se almacena la direccion del argumento */
+    }
+    push_argument (&if_.esp, argc, argv);//Hacemos push al stack de los argumentos
+     /* Se ejecuto correctamente */
+    thread_current ()->parent->success = true;
+    /* Avisamos al padre que todo salio bien*/
+    sema_up (&thread_current ()->parent->sema);
+  }
+  /* Liberando recursos si no se logro cargar el proceso*/
   palloc_free_page (file_name);
-  if (!success) 
+  free(fn_copy);
+  if (!success){
+    /* No se logro realizar */
+    thread_current ()->parent->success = false;
+    /*Avisamos que el hijo termino de ejecutar */
+    sema_up (&thread_current ()->parent->sema);
+    /*Nos salimos del thread */
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -74,6 +132,32 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+}
+
+/*  Empujar los argumentos hacia el stack:
+    Parametros:
+      - **esp, direccion del puntero del stack pointer.
+      - argc, cantidad de argumentos.
+      - argv, vector de los argumentos.
+*/
+void
+push_argument (void **esp, int argc, int argv[]){
+  /* Formato de 4 bits ,word-align */
+  *esp = (int)*esp & 0xfffffffc;
+  *esp -= 4;
+  /*Word allign */
+  *(int *) *esp = 0;
+  /* Se recorren los argumentos */
+  for (int i = argc - 1; i >= 0; i--) {
+    *esp -= 4; /* Vamos recorriendo las direcciones del stack */
+    *(int *) *esp = argv[i]; /* Almacenamos los argumentos en el stack */
+  }
+  *esp -= 4;
+  *(int *) *esp = (int) *esp + 4;/* Almacenar la direccion del primer argumento (argv[0]) */
+  *esp -= 4;
+  *(int *) *esp = argc; /* Almacenar la cantidad de argumentos */
+  *esp -= 4;
+  *(int *) *esp = 0; /* Direccion de retorno */
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
@@ -88,7 +172,32 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  struct list *l = &thread_current()->childs;
+  struct list_elem *child_elem_ptr;
+  child_elem_ptr = list_begin (l);
+  struct child *child_ptr = NULL;
+  while (child_elem_ptr != list_end (l)){
+    child_ptr = list_entry (child_elem_ptr, struct child, lista_child);
+    if (child_ptr->idthread == child_tid)
+    {
+      if (!child_ptr->thrcorriendo)
+      {
+        child_ptr->thrcorriendo = true;
+        sema_down (&child_ptr->semaforo);
+        break;
+      }
+      else 
+      {
+        return -1;
+      }
+    }
+    child_elem_ptr = list_next (child_elem_ptr);
+  }
+  if (child_elem_ptr == list_end(l)) {
+    return -1;
+  }
+  list_remove (child_elem_ptr);
+  return child_ptr->store_exit;
 }
 
 /* Free the current process's resources. */
