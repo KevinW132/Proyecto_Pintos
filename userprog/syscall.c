@@ -137,3 +137,138 @@ void sys_write (struct intr_frame* f){
     f->eax = size;
   }
 }
+
+struct thread_file *find_file_id (int file_id){
+  struct list_elem *e;
+  struct thread_file * thread_file_temp = NULL;
+  struct list *files = &thread_current ()->files;
+  for (e = list_begin (files); e != list_end (files); e = list_next (e)){
+    thread_file_temp = list_entry (e, struct thread_file, file_elem);
+    if (file_id == thread_file_temp->fd)
+      return thread_file_temp;
+  }
+  return false;
+}
+void sys_create(struct intr_frame* f){
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 5);
+  check_ptr2 (*(user_ptr + 4));
+  *user_ptr++;
+  acquire_lock_f ();
+  f->eax = filesys_create ((const char *)*user_ptr, *(user_ptr+1));
+  release_lock_f ();
+}
+
+void sys_remove(struct intr_frame* f){
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  check_ptr2 (*(user_ptr + 1));
+  *user_ptr++;
+  acquire_lock_f ();
+  f->eax = filesys_remove ((const char *)*user_ptr);
+  release_lock_f ();
+}
+void sys_open (struct intr_frame* f){
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  check_ptr2 (*(user_ptr + 1));
+  *user_ptr++;
+  acquire_lock_f ();
+  struct file * file_opened = filesys_open((const char *)*user_ptr);
+  release_lock_f ();
+  struct thread * t = thread_current();
+  if (file_opened)
+  {
+    struct thread_file *thread_file_temp = malloc(sizeof(struct thread_file));
+    thread_file_temp->fd = t->max_file_fd++;
+    thread_file_temp->file = file_opened;
+    list_push_back (&t->files, &thread_file_temp->file_elem);
+    f->eax = thread_file_temp->fd;
+  }else{
+    f->eax = -1;
+  }
+}
+void sys_filesize (struct intr_frame* f){
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  *user_ptr++;
+  struct thread_file * thread_file_temp = find_file_id (*user_ptr);
+  if (thread_file_temp){
+    acquire_lock_f ();
+    f->eax = file_length (thread_file_temp->file);
+    release_lock_f ();
+  }else{
+    f->eax = -1;
+  }
+}
+bool is_valid_pointer (void* esp,uint8_t argc){
+  for (uint8_t i = 0; i < argc; ++i){
+    if((!is_user_vaddr (esp)) || (pagedir_get_page (thread_current()->pagedir, esp)==NULL)){
+      return false;
+    }
+  }
+  return true;
+}
+void sys_read (struct intr_frame* f){
+  uint32_t *user_ptr = f->esp;
+  *user_ptr++;
+  int fd = *user_ptr;
+  uint8_t * buffer = (uint8_t*)*(user_ptr+1);
+  off_t size = *(user_ptr+2);
+  if (!is_valid_pointer (buffer, 1) || !is_valid_pointer (buffer + size,1)){
+    exit_special ();
+  }
+  if (fd == 0){
+    for (int i = 0; i < size; i++)
+      buffer[i] = input_getc();
+    f->eax = size;
+  }else{
+    struct thread_file * thread_file_temp = find_file_id (*user_ptr);
+    if (thread_file_temp){
+      acquire_lock_f ();
+      f->eax = file_read (thread_file_temp->file, buffer, size);
+      release_lock_f ();
+    }else{
+      f->eax = -1;
+    }
+  }
+}
+void sys_seek(struct intr_frame* f){
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 5);
+  *user_ptr++;
+  struct thread_file *file_temp = find_file_id (*user_ptr);
+  if (file_temp)
+  {
+    acquire_lock_f ();
+    file_seek (file_temp->file, *(user_ptr+1));
+    release_lock_f ();
+  }
+}
+void sys_tell (struct intr_frame* f){
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  *user_ptr++;
+  struct thread_file *thread_file_temp = find_file_id (*user_ptr);
+  if (thread_file_temp)
+  {
+    acquire_lock_f ();
+    f->eax = file_tell (thread_file_temp->file);
+    release_lock_f ();
+  }else{
+    f->eax = -1;
+  }
+}
+void sys_close (struct intr_frame* f){
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  *user_ptr++;
+  struct thread_file * opened_file = find_file_id (*user_ptr);
+  if (opened_file){
+    acquire_lock_f ();
+    file_close (opened_file->file);
+    release_lock_f ();
+    list_remove (&opened_file->file_elem);
+    free (opened_file);
+  }
+}
